@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 # Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,30 +23,42 @@ import socket
 import re
 # you may use urllib to encode data appropriately
 import urllib
+import urlparse
+
 
 def help():
     print "httpclient.py [GET/POST] [URL]\n"
+
 
 class HTTPResponse(object):
     def __init__(self, code=200, body=""):
         self.code = code
         self.body = body
 
+
 class HTTPClient(object):
     #def get_host_port(self,url):
-
-    def connect(self, host, port):
+    def connect(self, host, port=80):
         # use sockets!
+
+        clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        clientSocket.connect((self.host, port))
+        clientSocket.sendall(self.createRequest())
+
+        res = self.recvall(clientSocket)
+        if res:
+            print res
+
         return None
 
-    def get_code(self, data):
+    def get_code(self):
         return None
 
-    def get_headers(self,data):
+    def get_headers(self):
         return None
 
-    def get_body(self, data):
-        return None
+    def get_body(self):
+        return ""
 
     # read everything from the socket
     def recvall(self, sock):
@@ -60,7 +72,33 @@ class HTTPClient(object):
                 done = not part
         return str(buffer)
 
-    def GET(self, url, args=None):
+    def createRequest(self):
+        rawheaders = {
+            "Host": self.host,
+            "User-Agent": "Custom Agent",
+            "Accept": "*/*",
+            "Connection": "close"
+        }
+        headers = "".join("%s: %s\r\n" % (k, v) for k, v in rawheaders.iteritems())
+        return "%s %s HTTP/1.1\r\n%s\r\n%s" % (self.method, self.path, headers, self.get_body)
+
+    def setPath(self, url):
+        prefix = "http://"
+        if not url.startswith(prefix):
+            url += prefix
+        tokens = urlparse.urlparse(url)
+        print tokens
+
+        self.host = tokens.netloc
+        self.path = "/" if tokens.path == "" else tokens.path
+        self.params = tokens.params
+        self.query = tokens.query
+
+    # Combine GET and POST
+    def GET(self, url, args):
+        self.setPath(url)
+        self.connect(url, 80)
+
         code = 500
         body = ""
         return HTTPResponse(code, body)
@@ -71,18 +109,20 @@ class HTTPClient(object):
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
-        if (command == "POST"):
-            return self.POST( url, args )
-        else:
-            return self.GET( url, args )
-    
+        print(url, command, args)
+
+        if not (command == "GET" or command == "POST"):
+            return "Error"
+        self.method = command
+        self.GET(url, args)
+
 if __name__ == "__main__":
     client = HTTPClient()
-    command = "GET"
+    print sys.argv;
     if (len(sys.argv) <= 1):
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
-        print client.command( sys.argv[2], sys.argv[1] )
+        print client.command(sys.argv[2], sys.argv[1])
     else:
-        print client.command( sys.argv[1] )   
+        print client.command(sys.argv[1])
