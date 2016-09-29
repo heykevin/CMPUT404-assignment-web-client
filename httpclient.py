@@ -24,6 +24,7 @@ import re
 # you may use urllib to encode data appropriately
 import urllib
 import urlparse
+from itertools import takewhile, dropwhile
 
 
 def help():
@@ -31,9 +32,11 @@ def help():
 
 
 class HTTPResponse(object):
-    def __init__(self, code=200, body=""):
+    def __init__(self, code=200, message="OK", headers="", body=""):
         self.code = code
+        self.message = message
         self.body = body
+        self.headers = headers
 
 
 class HTTPClient(object):
@@ -44,12 +47,10 @@ class HTTPClient(object):
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         clientSocket.connect((self.host, port))
         clientSocket.sendall(self.createRequest())
-
         res = self.recvall(clientSocket)
         if res:
             print res
-
-        return None
+        return self.createResponse(res)
 
     def get_code(self):
         return None
@@ -59,6 +60,20 @@ class HTTPClient(object):
 
     def get_body(self):
         return ""
+
+    def createResponse(self, res):
+        rawheaders = res.split("\r\n")
+        print rawheaders
+
+        # test for empty headers/body
+        try:
+            print rawheaders[0].split(" ", 2)
+            protocol, code, message = rawheaders[0].split(" ", 2)
+            headers = dict(item.split(": ", 1) for item in takewhile(lambda s: s != '', rawheaders[1:]))
+            body = "".join(list(dropwhile(lambda s: s != '', rawheaders[1:])))
+        except ValueError as e:
+            print e
+        return HTTPResponse(code, message, headers, body)
 
     # read everything from the socket
     def recvall(self, sock):
@@ -85,7 +100,7 @@ class HTTPClient(object):
     def setPath(self, url):
         prefix = "http://"
         if not url.startswith(prefix):
-            url += prefix
+            url = prefix + url
         tokens = urlparse.urlparse(url)
         print tokens
 
@@ -97,11 +112,7 @@ class HTTPClient(object):
     # Combine GET and POST
     def GET(self, url, args):
         self.setPath(url)
-        self.connect(url, 80)
-
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        return self.connect(url, 80)
 
     def POST(self, url, args=None):
         code = 500
