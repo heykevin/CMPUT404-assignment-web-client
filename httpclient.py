@@ -41,25 +41,16 @@ class HTTPResponse(object):
 
 class HTTPClient(object):
     #def get_host_port(self,url):
-    def connect(self, host, port=80):
+    def connect(self, host):
         # use sockets!
 
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        clientSocket.connect((self.host, port))
+        clientSocket.connect((self.host, self.port))
         clientSocket.sendall(self.createRequest())
         res = self.recvall(clientSocket)
         if res:
             print res
         return self.createResponse(res)
-
-    def get_code(self):
-        return None
-
-    def get_headers(self):
-        return None
-
-    def get_body(self):
-        return ""
 
     def createResponse(self, res):
         rawheaders = res.split("\r\n")
@@ -69,8 +60,8 @@ class HTTPClient(object):
         try:
             print rawheaders[0].split(" ", 2)
             protocol, code, message = rawheaders[0].split(" ", 2)
-            headers = dict(item.split(": ", 1) for item in takewhile(lambda s: s != '', rawheaders[1:]))
-            body = "".join(list(dropwhile(lambda s: s != '', rawheaders[1:])))
+            headers = dict(item.split(": ", 1) for item in takewhile(lambda rawres: rawres != '', rawheaders[1:]))
+            body = "".join(list(dropwhile(lambda rawres: rawres != '', rawheaders[1:])))
         except ValueError as e:
             print e
         return HTTPResponse(code, message, headers, body)
@@ -94,8 +85,16 @@ class HTTPClient(object):
             "Accept": "*/*",
             "Connection": "close"
         }
+
+        #encode arguments
+        if self.method == "POST" and args:
+            rawHeaders["Content-Type"] = "x-www-form-urlencoded\r\n"
+            body = urllib.urlencode(args)
+            # bytearray?
+            rawHeaders["Content-Length"] = len(body) + '\r\n'
+        
         headers = "".join("%s: %s\r\n" % (k, v) for k, v in rawheaders.iteritems())
-        return "%s %s HTTP/1.1\r\n%s\r\n%s" % (self.method, self.path, headers, self.get_body)
+        return "%s %s HTTP/1.1\r\n%s\r\n%s" % (self.method, self.path, headers, self.get_body())
 
     def setPath(self, url):
         prefix = "http://"
@@ -103,16 +102,21 @@ class HTTPClient(object):
             url = prefix + url
         tokens = urlparse.urlparse(url)
         print tokens
+        try:
+            self.host, self.port = tokens.netloc.split(":")
+        except:
+            self.host = tokens.netloc
+            self.port = 80
 
-        self.host = tokens.netloc
         self.path = "/" if tokens.path == "" else tokens.path
         self.params = tokens.params
         self.query = tokens.query
 
     # Combine GET and POST
+    # extract port
     def GET(self, url, args):
         self.setPath(url)
-        return self.connect(url, 80)
+        return self.connect(url)
 
     def POST(self, url, args=None):
         code = 500
@@ -133,7 +137,7 @@ if __name__ == "__main__":
     if (len(sys.argv) <= 1):
         help()
         sys.exit(1)
-    elif (len(sys.argv) == 3):
+    if (len(sys.argv) == 3):
         print client.command(sys.argv[2], sys.argv[1])
     else:
         print client.command(sys.argv[1])
