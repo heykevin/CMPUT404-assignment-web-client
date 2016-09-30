@@ -43,29 +43,24 @@ class HTTPClient(object):
     #def get_host_port(self,url):
     def connect(self, host, args):
         # use sockets!
-
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         clientSocket.connect((self.host, self.port))
         clientSocket.sendall(self.createRequest(args))
+        print self.createRequest(args)
         res = self.recvall(clientSocket)
-        if res:
-            print res
         return self.createResponse(res)
 
     def createResponse(self, res):
         rawheaders = res.split("\r\n")
-        # print rawheaders
-
         # test for empty headers/body
         try:
-            # print rawheaders[0].split(" ", 2)
             protocol, code, message = rawheaders[0].split(" ", 2)
             headers = dict(item.split(": ", 1) for item in takewhile(lambda rawres: rawres != '', rawheaders[1:]))
             body = "".join(list(dropwhile(lambda rawres: rawres != '', rawheaders[1:])))
         except ValueError as e:
             print "ValueError: %s" % e
-        print "response is "
-        print [protocol, code, message, headers, body]
+        # print "response is "
+        # print [protocol, code, message, headers, body]
         return HTTPResponse(code, message, headers, body)
 
     # read everything from the socket
@@ -80,33 +75,34 @@ class HTTPClient(object):
                 done = not part
         return str(buffer)
 
-    def get_body(self):
-        return ""
-
     def createRequest(self, args=None):
         rawheaders = {
-            "Host": self.host,
+            "Host": "%s:%i" % (self.host, self.port),
             "User-Agent": "Custom Agent",
             "Accept": "*/*",
-            "Connection": "close"
+            "Connection": "close" 
         }
+        body = None
+        if self.method == "GET":
+            if args:
+                self.path += "&" if self.query else "?" + urllib.urlencode(args)
+            elif self.query:
+                self.path += "?" + self.query
 
         #encode arguments and path?
-        if self.method == "POST" and args:
-            rawHeaders["Content-Type"] = "x-www-form-urlencoded\r\n"
-            body = urllib.urlencode(args)
-            # bytearray?
-            rawHeaders["Content-Length"] = len(body) + '\r\n'
-
+        if self.method == "POST":
+            rawheaders["Content-Type"] = "application/x-www-form-urlencoded"
+            body = urllib.urlencode(args) if args else ""
+            rawheaders["Content-Length"] = len(body)
         headers = "".join("%s: %s\r\n" % (k, v) for k, v in rawheaders.iteritems())
-        return "%s %s HTTP/1.1\r\n%s\r\n%s" % (self.method, self.path, headers, self.get_body())
+        return "%s %s HTTP/1.1\r\n%s\r\n%s" % (self.method, self.path, headers, body or "")
 
     def setPath(self, url):
         prefix = "http://"
         if not url.startswith(prefix):
             url = prefix + url
         tokens = urlparse.urlparse(url)
-        print tokens
+        # print tokens
         try:
             self.host = tokens.netloc.split(":")[0]
             self.port = int(tokens.netloc.split(":")[1])
@@ -119,7 +115,6 @@ class HTTPClient(object):
         self.query = tokens.query
 
     # Combine GET and POST
-    # extract port
     def GET(self, url, args=None):
         self.method = "GET"
         self.setPath(url)
@@ -128,22 +123,20 @@ class HTTPClient(object):
     def POST(self, url, args=None):
         self.method = "POST"
         self.setPath(url)
-        code = 500
-        body = ""
         return self.connect(url, args)
 
 
     def command(self, url, command="GET", args=None):
-        print(url, command, args)
-
         if not (command == "GET" or command == "POST"):
             return "Error"
-        self.method = command
-        self.GET(url, args)
+        if (command == "POST"):
+            return self.POST(url, args)
+        else:
+            return self.GET(url, args)
 
 if __name__ == "__main__":
     client = HTTPClient()
-    print sys.argv;
+    command = "GET"
     if (len(sys.argv) <= 1):
         help()
         sys.exit(1)
